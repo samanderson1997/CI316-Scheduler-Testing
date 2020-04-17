@@ -1,8 +1,3 @@
-/**
-  Changes since last Git upload:
- - Cleaned and reformatted source code. Inlined variables, cleaned up processes, removed redundant functions
-
- */
 
 /**********************************************************************************************************************/
 /*********************************************** PROCEDURAL CALLS *****************************************************/
@@ -77,7 +72,7 @@ function testSuite() {
   var boundaryTest = false;
 
   // Write a test query here
-  describe("maths", 2, "10:00", "18:00", "on", false, 0);
+  describe("product design", 1, "09:00", "17:00", "off", false, 0);
 
   function describe(subject, mode, start, finish, weekends, boundaries, type) {
     if(boundaries) { boundaryTest = true; }
@@ -121,7 +116,7 @@ function testSuite() {
         let pass = completedSubjects[i].success;
         let str;
         if(pass) {
-          str = completedSubjects[i].moduleName + ": PASSED " + "\n";
+          str = completedSubjects[i].moduleName + ": COMPLETED " + "\n";
         } else {
           str = completedSubjects[i].moduleName + ": FAILED " + "\n";
         }
@@ -154,10 +149,10 @@ function testSuite() {
       m3 = {
         moduleCode: "BS301",
         moduleName: "Dissertation",
-        quota: 100,
+        quota: 50,
         color: "Black",
         type: "A",
-        dueDate: "2019-10-28"
+        dueDate: "2019-10-31"
       },
       m4 = {
         moduleCode: "BS307",
@@ -411,7 +406,7 @@ function testSuite() {
 
   // Business & Finance
   function $business_schedule(start, finish, weekends, mode, type) {
-    let bundle = setUp(start, finish, mode, "business");
+    let bundle = setUp(start, finish, weekends, mode, "business");
     if(boundaryTest) { setBoundaryTest(bundle.assignments, bundle.plan, type) }
     work_planner(bundle.assignments, bundle.plan);
     tearDown();
@@ -473,95 +468,11 @@ function testSuite() {
     });
   }
 
-  //var success = equal(4, 4, 8);
-  //function testArithmetic() {}
-
   // ASSERTIONS
   function equal(a, b, c) {
     return a + b === c;
   }
 
-  function oldStuff() {
-    // Things I used for testing during design
-    /** var test_assignments = [module1 = {
-    moduleCode: "CI346",
-    moduleName: "Computer Graphics",
-    quota: 100,
-    color: "Black",
-    type: "A",
-    dueDate: "2019-12-12"
-  }, module2 = {
-    moduleCode: "CI360",
-    moduleName: "Mobile App Development",
-    quota: 200,
-    color: "Green",
-    type: "A",
-    dueDate: "2020-05-01"
-  }, module3 = {
-    moduleCode: "CI301",
-    moduleName: "Individual Project",
-    quota: 400,
-    color: "Blue",
-    type: "A",
-    dueDate: "2020-05-20"
-  }, module4 = {
-    moduleCode: "CI332",
-    moduleName: "Software Validation",
-    quota: 200,
-    color: "Red",
-    type: "A",
-    dueDate: "2020-04-20"
-  }
-     ]; */
-    /** var extendedAssignments = [m1={
-    moduleCode: "CI301",
-    moduleName: "The Individual Project",
-    quota: 400,
-    color: "Black",
-    type: "A",
-    dueDate: "2020-05-20" },
-
-     m2={ moduleCode: "CI360",
-      moduleName: "Mobile App Development",
-      quota: 200,
-      color: "Green",
-      type: "A",
-      dueDate: "2020-05-01"},
-
-     m3={ moduleCode: "CI315",
-      moduleName: "Design Patterns",
-      quota: 100,
-      color: "Orange",
-      type: "E", // Type: Exam
-      dueDate: "2020-01-28"},
-
-     m4={ moduleCode: "CI315",
-      moduleName: "Software Architecture",
-      quota: 100,
-      color: "Brown",
-      type: "E",
-      dueDate: "2020-06-01" },
-
-     m5={ moduleCode: "CI312",
-      moduleName: "Computer Graphics Algorithms",
-      quota: 100,
-      color: "Purple",
-      type: "A",
-      dueDate: "2019-12-12"
-    },
-
-     m6={ moduleCode: "CI316",
-      moduleName: "Software Validation",
-      quota: 100,
-      color: "Blue",
-      type: "A",
-      dueDate: "2020-05-31"
-    }
-     ]; */
-    //work_planner(test_assignments, scheduledPlan); // For testing normal scheduling
-    //work_planner(extendedAssignments, scheduledPlan); // For testing refactored scheduling
-    //work_planner(business_assignments, schedulePlan);
-  }
 }
 
 /**********************************************************************************************************************/
@@ -1001,14 +912,13 @@ function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
 
 // Schedule Mode 1: Assignment mode (longer blocks of study, extended study sessions
 function schedule_assignmentMode(assignments, plan, date, cap, total, id) {
-
   let quotasComp = false; // For keeping track of outstanding work
 
   // Double up all averages for assignment mode to make the blocks longeer
   assignments.forEach(function(e) {
-    e.avg = e.avg * 2;
-    if(e.avg >= cap / 2) {
-      e.avg = ((cap/2) -0.5); // Decrement to ensure the user has free time during the day if one of their subjects exceeds 50% of their day
+    e.avg++; // Add an hour to each for longer blocks
+    if(e.avg > cap/2) {
+      e.avg = ((cap/2)-1); // Decrement to ensure the user has free time during the day if one of their subjects exceeds 50% of their day
     }
   });
 
@@ -1017,10 +927,11 @@ function schedule_assignmentMode(assignments, plan, date, cap, total, id) {
   // Runs while there's still hours left to plan
   while(quotasComp === false) {
     date = scheduleBatchSubjects(date, assignments, cap, total, plan, id);
-    if(date.getDay() % 4 !== 0) {
-      assignments = sortByWorkload(assignments, 1);
-    } else{
-      assignments = sortByDeadline(assignments, -1);
+    assignments = sortByDeadline(assignments, -1);
+    if(date.getDay() % 2  === 0) { // a multiple of two (2, 4, 6)
+      assignments = randomise(assignments);
+    } else{ // Not (0, 1, 3, 5)
+      assignments = sortByDeadline(assignments, -1); // Sort the assignments according to the soonest
     }
     quotasComp = checkAllQuotas(assignments);
   }
@@ -1032,22 +943,18 @@ function schedule_assignmentMode(assignments, plan, date, cap, total, id) {
 function schedule_balancedMode(assignments, plan, date, cap, total, id) {
 
   let quotasComplete = false; // For keeping track of outstanding work to be done
-  assignments = sortByWorkload(assignments, 1); // Sort the assignments so the highest workload is at the front
-
-  // Swap the longest session with the second longest or it might cause unnecessary 3-hour slot skips on the first day
-  let t1 = assignments[1];
-  assignments[1] = assignments[0];
-  assignments[0] = t1;
+  assignments = sortByDeadline(assignments, -1); // Sort the assignments so the highest workload is at the front
+  assignments[0].avg = assignments[0].avg + 1; // Give priority to the soonest
 
   // Schedule while there's still work to be done
   while(quotasComplete === false) {
     date = scheduleBatchSubjects(date, assignments, cap, total, plan, id); // Batch job
 
-    // For variety and efficiency
-    if(date.getDay() % 4 !== 0) {
-      assignments.reverse();
-    } else{
-      assignments = sortByDeadline(assignments, 1);
+    // Always puts the highest-priority subjects to the front
+    if(date.getDay() % 2 === 0) {
+      assignments = sortByDailyAverage(assignments, 1);
+    } else {
+      assignments = sortByDeadline(assignments, -1);
     }
     quotasComplete = checkAllQuotas(assignments);
   }
@@ -1072,7 +979,7 @@ function schedule_revisionMode(assignments, plan, date, cap, total, id) {
   while(assignments_done === false) {
     date = scheduleBatchSubjects(date, assignments, cap, total, plan, id); // Batch job
     if(date.getDay() % 2 !== 0) {
-      assignments = sortByDeadline(assignments, 1);
+      assignments = sortByDeadline(assignments, -1);
     } else {
       assignments = sortByWorkload(assignments, -1);
     }
@@ -1224,7 +1131,6 @@ function showStudySessionGroup(cb_val, mode, assignments) {
 
   // Box ticked- Show all
   if(mode===1) {
-
     // Loop through each event looking for matches on the code for the filter that was clicked
     evs.forEach(function (event) {
       let tempLetter = event.text.substring(0,1); // Direct match
