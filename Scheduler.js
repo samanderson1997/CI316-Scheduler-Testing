@@ -72,7 +72,7 @@ function testSuite() {
   var boundaryTest = false;
 
   // Write a test query here
-  describe("product design", 1, "09:00", "17:00", "off", false, 0);
+  describe("product design", 2, "09:00", "17:00", "off", false, 0);
 
   function describe(subject, mode, start, finish, weekends, boundaries, type) {
     if(boundaries) { boundaryTest = true; }
@@ -122,7 +122,7 @@ function testSuite() {
         }
         report += str;
       }
-      alert(report);
+      //alert(report);
     }
   }
 
@@ -786,7 +786,6 @@ function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
 
   // Set exam / deadline reminders on the day
   for(var i=0; i<assignments.length; i++) { // Looping over each subject
-
     // Add a reminder (either an exam or coursework reminder depending on type) for the deadline of the subject
     if(assignments[i].type !== "done") {
       setDeadlineReminder(assignments[i], plan);
@@ -795,6 +794,15 @@ function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
 
     // Check if the user wants to schedule study on weekend days, and skip them if not
     if (plan.weekends === "off") { date = skipWeekendDays(date, plan); }
+
+    // Check for a looming deadline with a lot of work still left and swap that in for i
+    let pos = checkHighPrioritySubject(assignments);
+    let cc_i; let highPrioritySubject = false;
+    if(pos !== false) {
+      cc_i = i; // Create a copy of i
+      i = pos; // Set i to the high-priority subject going forward
+      highPrioritySubject = true; // We'll need this to put i back
+    }
 
     // Get the display attributes for the calendar event
     tempName = assignments[i].moduleName;
@@ -885,7 +893,7 @@ function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
 
     // Update the time then add a proportional break relative to the workload
     date = nextDate; // Update the time after the session has been added
-    let breakLength = addBreak(cap, total, assignments.length, plan, id); // Add a break between study sessions
+    let breakLength = addBreak(cap, total, assignments.length, plan, id, sessionLength); // Add a break between study sessions
     date = new Date(date.getTime() + (60 * 60 * 1000) * breakLength); // + x number of break hours
 
     // Check to see if the current assignment has any work left to plan, and then remove it if not
@@ -906,6 +914,10 @@ function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
       completedSubjects.push(completedModule);
       assignments.splice(i, 1); // Remove the subject from the workload
     }
+
+    // If this was a high-priority subject, put i back to its original position
+    if(highPrioritySubject) { i = cc_i; }
+
   }
   return date; // Return the date at the end of the day
 }
@@ -917,19 +929,20 @@ function schedule_assignmentMode(assignments, plan, date, cap, total, id) {
   // Double up all averages for assignment mode to make the blocks longeer
   assignments.forEach(function(e) {
     e.avg++; // Add an hour to each for longer blocks
-    if(e.avg > cap/2) {
+    if(e.avg >= cap/2) {
       e.avg = ((cap/2)-1); // Decrement to ensure the user has free time during the day if one of their subjects exceeds 50% of their day
     }
   });
 
-  assignments = sortByDeadline(assignments, -1); // Sort the assignments according to the soonest
+  // Sort the assignments according to the soonest
+  assignments = sortByDeadline(assignments, -1);
 
   // Runs while there's still hours left to plan
   while(quotasComp === false) {
     date = scheduleBatchSubjects(date, assignments, cap, total, plan, id);
     assignments = sortByDeadline(assignments, -1);
     if(date.getDay() % 2  === 0) { // a multiple of two (2, 4, 6)
-      assignments = randomise(assignments);
+      assignments = sortByHoursAlreadyScheduled(assignments, -1); // Sort the workload by largest
     } else{ // Not (0, 1, 3, 5)
       assignments = sortByDeadline(assignments, -1); // Sort the assignments according to the soonest
     }
@@ -942,9 +955,15 @@ function schedule_assignmentMode(assignments, plan, date, cap, total, id) {
 // Schedule Mode 2: Balanced (long and short blocks, whatever works really)
 function schedule_balancedMode(assignments, plan, date, cap, total, id) {
 
+  // Check for long blocks
+  for(let i=0; i<assignments.length; i++) {
+    if(assignments[i].avg >= (cap/2)) {
+      assignments[i].avg = ((cap/2)-1);
+    }
+  }
+
   let quotasComplete = false; // For keeping track of outstanding work to be done
   assignments = sortByDeadline(assignments, -1); // Sort the assignments so the highest workload is at the front
-  assignments[0].avg = assignments[0].avg + 1; // Give priority to the soonest
 
   // Schedule while there's still work to be done
   while(quotasComplete === false) {
@@ -952,7 +971,7 @@ function schedule_balancedMode(assignments, plan, date, cap, total, id) {
 
     // Always puts the highest-priority subjects to the front
     if(date.getDay() % 2 === 0) {
-      assignments = sortByDailyAverage(assignments, 1);
+      assignments = sortByHoursAlreadyScheduled(assignments, -1);
     } else {
       assignments = sortByDeadline(assignments, -1);
     }
@@ -981,13 +1000,27 @@ function schedule_revisionMode(assignments, plan, date, cap, total, id) {
     if(date.getDay() % 2 !== 0) {
       assignments = sortByDeadline(assignments, -1);
     } else {
-      assignments = sortByWorkload(assignments, -1);
+      assignments = sortByHoursAlreadyScheduled(assignments, -1);
     }
     assignments_done = checkAllQuotas(assignments);
   }
 
   alert("Scheduling finished.");
 
+}
+
+// Check if there is a fast-approaching deadline with a lot of work to do still.
+function checkHighPrioritySubject(assignments) {
+  for(let i=0; i<assignments.length; i++) {
+    let daysUntil = getDaysUntilDeadline(assignments[i].dueDate, cd);
+    let quota = assignments[i].quota;
+
+    // High priority subject
+    if(daysUntil < 20 && quota > daysUntil) {
+      return getAssignmentByName(assignments, assignments[i].moduleName);
+    }
+  }
+  return false;
 }
 
 
@@ -1216,6 +1249,25 @@ function sortByDeadline(assignments, mode) {
   return assignments;
 }
 
+function sortByHoursAlreadyScheduled(assignments, mode) { // 1: Sort by mode scheduled, -1 sort by least scheduled
+
+  function compare(a,b) {
+    let t1 = a.hoursScheduled;
+    let t2 = b.hoursScheduled;
+    let comp;
+    if(t1 >= t2) {
+      comp = mode;
+    } else {
+      comp = mode*1;
+    }
+    return comp;
+  }
+
+  assignments.sort(compare);
+  return assignments;
+
+}
+
 // Randomise the elements of an array
 function randomise(arr) {
   for(let i= arr.length-1; i>0; i--) {
@@ -1361,13 +1413,14 @@ function skipWeekendDays(date, plan) {
 }
 
 // Determine the length of breaks based on the workload and settings used
-function addBreak(cap, total, moduleCount, plan, id) {
+function addBreak(cap, total, moduleCount, plan, id, sessionLength) {
 
   // If there's only a couple of modules left in the array
   if(moduleCount === 1 || moduleCount === 2) {
     return 1;
+
   } else if(moduleCount === 3) {
-      return 0.5;
+      return 1;
 
   } else {
     switch(id) {
@@ -1378,11 +1431,15 @@ function addBreak(cap, total, moduleCount, plan, id) {
       case 2: // RefactorStudy - Needs specific rules to follow
         switch(plan.mode) {
           case 1: // Assignment Mode
-            return 0.5; // Anything less and it won't be added before the day increments
+            if(sessionLength > 2) {
+              return 1;
+            } else {
+              return 0.5; // Anything less and it won't be added before the day increments
+            }
 
           case 2: // Balanced mode
             if(plan.weekends === "off") {
-              return 0.25;
+              return 0.333333333333333;
             } else {
               return 0.5;
             }
