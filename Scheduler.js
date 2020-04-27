@@ -9,7 +9,7 @@ var cd = new Date(currentDate); // TODO: Update to the real current date when sy
 //var currentDate = stringBuilder(cd); // TODO: Replaces occurrences of currentDate with this when the system is using the real date and not a dummy one
 
 // On-screen Calendar Initialisation
-scheduler.config.first_hour = 7;
+scheduler.config.first_hour = 0;
 scheduler.config.last_hour = 24;
 scheduler.config.collision_limit = 1;
 scheduler.init('scheduler_here', new Date(currentDate), "week"); // Starts at the start of term
@@ -72,7 +72,7 @@ function testSuite() {
   var boundaryTest = false;
 
   // Write a test query here
-  describe("product design", 2, "09:00", "17:00", "off", false, 0);
+  describe("maths", 2, "17:00", "23:59", "off", false, 0);
 
   function describe(subject, mode, start, finish, weekends, boundaries, type) {
     if(boundaries) { boundaryTest = true; }
@@ -371,7 +371,7 @@ function testSuite() {
       m7= { moduleCode: "CI346",
         moduleName: "Programming Languages",
         quota: 100,
-        color: "Pink",
+        color: "Gray",
         type: "A",
         dueDate: "2020-01-17"
       },
@@ -379,7 +379,7 @@ function testSuite() {
       m8 = { moduleCode: "CI346",
         moduleName: "Concurrency & Client Server Computing",
         quota: 100,
-        color: "Pink",
+        color: "Gray",
         type: "E",
         dueDate: "2020-05-22"
       }
@@ -781,6 +781,8 @@ function refactorStudy(assignments, plan, cap, total) {
 // Batch Scheduler- Plan subjects and breaks for a given day
 function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
 
+  //if(date.getHours() < plan.startTime.substring(0,2)) { date = new Date(resetDate(date) + " " + plan.startTime); }
+
   // Temp vars for creating the calendar entry on-screen
   var sessionLength, tempName, tempCode, tempColour;
 
@@ -843,24 +845,26 @@ function scheduleBatchSubjects(date, assignments, cap, total, plan, id) {
       }
 
       // Check if the finish time is going to exceed the daily limit
-      let provisionalDate = new Date(date.getTime() + (sessionLength * (60*60*1000))); // + sessionLength in hrs
-      //alert(provisionalDate);
-
-      if(provisionalDate.getHours()-1 >= plan.endTime.substring(0,2) || provisionalDate.getHours() < plan.startTime.substring(0,2)) { // -1 to get the right hour
-        date = incrementDay(date, plan); // Move to next day
+      let provisionalFinishDate = new Date(date.getTime() + (sessionLength * (60*60*1000))); // + sessionLength in hrs
+      if(provisionalFinishDate.getHours() < plan.startTime.substring(0,2) || provisionalFinishDate.getHours()-1 >= plan.endTime.substring(0,2)) { // -1 to get the right hour
+        if(date.getHours() === 0 ) { // Rolled over onto the next day
+          date = new Date(resetDate(date) + " " + plan.startTime);
+        } else { // Need to increment
+          date = incrementDay(date, plan); // Move to next day
+        }
         if(plan.weekends === "off") { date = skipWeekendDays(date, plan); } // To stop overlap onto a Saturday
       }
+
+
     }
 
     // Splices any subject which has passed the due date and expired.
     let this_deadline = new Date(assignments[i].dueDate);
-
     // Passed the due date, expired
     if(date.getTime() > this_deadline.getTime()) {
       var failedModule = {}; // Will be added to the finished modules list for the scheduling report on-screen
       let name = assignments[i].moduleName;
       let scheduled = assignments[i].hoursScheduled;
-
       // Keep a global record of the completed subjects
       failedModule = {
         moduleName: name,
@@ -942,9 +946,9 @@ function schedule_assignmentMode(assignments, plan, date, cap, total, id) {
     date = scheduleBatchSubjects(date, assignments, cap, total, plan, id);
     assignments = sortByDeadline(assignments, -1);
     if(date.getDay() % 2  === 0) { // a multiple of two (2, 4, 6)
-      assignments = sortByHoursAlreadyScheduled(assignments, -1); // Sort the workload by largest
-    } else{ // Not (0, 1, 3, 5)
       assignments = sortByDeadline(assignments, -1); // Sort the assignments according to the soonest
+    } else{ // Not (0, 1, 3, 5)
+      assignments = sortByHoursAlreadyScheduled(assignments, 1); // Sort the workload by largest
     }
     quotasComp = checkAllQuotas(assignments);
   }
@@ -971,7 +975,7 @@ function schedule_balancedMode(assignments, plan, date, cap, total, id) {
 
     // Always puts the highest-priority subjects to the front
     if(date.getDay() % 2 === 0) {
-      assignments = sortByHoursAlreadyScheduled(assignments, -1);
+      assignments = sortByHoursAlreadyScheduled(assignments, 1);
     } else {
       assignments = sortByDeadline(assignments, -1);
     }
@@ -1000,7 +1004,7 @@ function schedule_revisionMode(assignments, plan, date, cap, total, id) {
     if(date.getDay() % 2 !== 0) {
       assignments = sortByDeadline(assignments, -1);
     } else {
-      assignments = sortByHoursAlreadyScheduled(assignments, -1);
+      assignments = sortByHoursAlreadyScheduled(assignments, 1);
     }
     assignments_done = checkAllQuotas(assignments);
   }
